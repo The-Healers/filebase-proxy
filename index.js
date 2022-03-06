@@ -12,7 +12,6 @@ const _ = require('lodash');
 
 const { v4: uuidv4 } = require('uuid');
 
-
 const app = express();
 
 // enable files upload
@@ -42,7 +41,7 @@ app.get('/', async (req, res) => {
 
   const getParams = {
     Bucket: process.env.BUCKET_NAME,
-    Key: key
+    Key: key,
   }
   
   s3.getObject(getParams, (err, data) => {
@@ -51,14 +50,12 @@ app.get('/', async (req, res) => {
         status: false,
         message: 'No file found'
       });
+      console.log("File not found")
       return;
     }
 
-    res.send({
-      status: true,
-      message: 'Found file',
-      data: data
-    })
+    res.send(data.Body)
+    console.log("File Found")
 
   });
 
