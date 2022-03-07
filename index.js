@@ -26,7 +26,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 app.use(morgan('dev'));
 
 
-app.get('/', async (req, res) => {
+app.get('/doc', async (req, res) => {
   const { key } = req.query;
 
   AWS.config.update({
@@ -39,12 +39,12 @@ app.get('/', async (req, res) => {
       endpoint: process.env.ENDPOINT,
   });
 
-  const getParams = {
-    Bucket: process.env.BUCKET_NAME,
+  const docParams = {
+    Bucket: process.env.DOC_BUCKET_NAME,
     Key: key,
   }
-  
-  s3.getObject(getParams, (err, data) => {
+
+  s3.getObject(docParams, (err, data) => {
     if (err) {
       res.send({
         status: false,
@@ -61,9 +61,47 @@ app.get('/', async (req, res) => {
 
 })
 
-app.post('/upload', async (req, res) => {
+app.get('/metadata', async (req, res) => {
+  const { key } = req.query;
+
+  AWS.config.update({
+    accessKeyId: process.env.ACCESS_KEY,
+    secretAccessKey: process.env.SECRET_KEY,
+    signatureVersion: 'v4',
+  });
+
+  const s3 = new AWS.S3({
+      endpoint: process.env.ENDPOINT,
+  });
+
+  const metaDataParams = {
+    Bucket: process.env.METADATA_BUCKET_NAME,
+    Key: key,
+  }
+  
+  s3.getObject(metaDataParams, (err, data) => {
+    if (err) {
+      res.send({
+        status: false,
+        message: 'No file found'
+      });
+      console.log("File not found")
+      return;
+    }
+
+    res.send({
+      status: true,
+      message: 'Metadata is Found',
+      data: JSON.parse(data.Body.toString())
+    });
+
+  });
+
+})
+
+app.post('/upload-doc', async (req, res) => {
   try {
-    const uid = uuidv4();
+    
     if(!req.files) {
         res.send({
             status: false,
@@ -71,6 +109,7 @@ app.post('/upload', async (req, res) => {
         });
         console.log('No file uploaded')
     } else {
+        const uid = uuidv4();
         //Use the name of the input field (i.e. "docFile") to retrieve the uploaded file
         let docFile = req.files.docFile;
         
@@ -119,7 +158,7 @@ app.post('/upload', async (req, res) => {
                 // Setting up S3 upload parameters
                 var params = {
                   Body: fileContent,
-                  Bucket: process.env.BUCKET_NAME,
+                  Bucket: process.env.DOC_BUCKET_NAME,
                   Key: uid,
                 };
                 s3.putObject(params, function(err, data) {
@@ -161,6 +200,77 @@ app.post('/upload', async (req, res) => {
           }
         })
     }
+  } catch (err) {
+      res.status(500).send(err);
+  }
+});
+
+app.post('/upload-metadata', async (req, res) => {
+  try {
+    const uid = uuidv4();
+    const { name, location, contact, access, docUID } = req.body;
+      
+    AWS.config.update({
+      accessKeyId: process.env.ACCESS_KEY,
+      secretAccessKey: process.env.SECRET_KEY,
+      signatureVersion: 'v4',
+    });
+  
+    const s3 = new AWS.S3({
+        endpoint: process.env.ENDPOINT,
+    });
+  
+    s3.listBuckets(function(err, data) {
+      if (err) {
+        console.log(err, err.stack);
+
+        //send response
+        res.send({
+          status: false,
+          message: 'No Bucket',
+          data: {
+            error: err
+          }
+        });
+        console.log('No Bucket')
+      } else {
+        // Setting up S3 upload parameters
+        var params = {
+          Body: JSON.stringify({ name, location, contact, access, docUID }),
+          Bucket: process.env.METADATA_BUCKET_NAME,
+          Key: uid,
+        };
+
+        s3.putObject(params, function(err, data) {
+          if (err) {
+            console.log(err, err.stack);
+            //send response
+            res.send({
+              status: false,
+              message: 'Failed uploading metadata',
+              data: {
+                error: err
+              }
+            });
+            console.log('Failed uploading metadata')
+          } else {
+            console.log(data);
+
+            //send response
+            res.send({
+              status: true,
+              message: 'Metadata is uploaded',
+              data: {
+                  uid
+              }
+            });
+            console.log('Metadata is uploaded')
+          }
+        });
+      }
+    });
+    
+
   } catch (err) {
       res.status(500).send(err);
   }
